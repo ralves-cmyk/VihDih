@@ -29,30 +29,31 @@ import matplotlib.pyplot as plt
 
 P = {
     # --- mass ---
-    "m_vehicle":  None,   # kg, unloaded, MEASURED in Lab 2
-    "m_driver":   None,   # kg
+    "m_vehicle":  50.17,   # kg, unloaded, MEASURED in Lab 2
+    "m_driver":    67.1,   # kg
     # --- geometry ---
-    "L":          None,   # m, wheelbase at your locked frame setting
-    "a":          None,   # m, front axle to CG (from corner weights)
-    "h":          None,   # m, combined CG height (Lab 2: tilt-measured kart
-                          #      + anthropometric driver, composed)
+    "L":        0.9017,   # m, wheelbase at your locked frame setting
+    "a":          0.57,   # m, front axle to CG (from corner weights), loaded
+    "h":        0.5735,   # m, combined CG height (Lab 2: tilt-measured kart
+                          #      + anthropometric driver, composed) MAY NEED TO BE REVISED - Raistlin
     "h_aero":     None,   # m, height at which drag acts
-    "t_track":    None,   # m, track width
+    "t_track":  0.7366,   # m, track width FRONT
+    "t_track_r":0.50165,   # m, track width REAR
     "r_w":        None,   # m, rolling radius
     # --- rotating inertia ---
-    "I_wheel_f":  None,   # kg*m^2, per front wheel
-    "I_wheel_r":  None,   # kg*m^2, per rear wheel
+    "I_wheel_f":  0.008,   # kg*m^2, per front wheel
+    "I_wheel_r":  0.016,   # kg*m^2, per rear wheel ESTIMATED WITH BOUNDING METHOD - Raistlin
     "I_motor":    None,   # kg*m^2, per motor rotor (0.0 if lumped into wheel)
     "N_gear":     1.0,    # motor:wheel ratio. 1.0 for direct-drive hub motors
     # --- resistances ---
-    "C_rr":       None,   # -
-    "C_d":        None,   # -
-    "A_frontal":  None,   # m^2
+    "C_rr":       0.012,   # - PROVISIONAL
+    "C_d":        0.7,   # -
+    "A_frontal":  0.25,   # m^2 - Provided by Colin Thomas
     "rho_air":    1.20,   # kg/m^3  -- check against Golden CO elevation!
     # --- tire / road ---
-    "mu":         None,   # - (ASSUMED until Lab 4)
-    "k_t_f":      None,   # N/m, front tire vertical stiffness
-    "k_t_r":      None,   # N/m, rear tire vertical stiffness
+    "mu":         5,   # - (ASSUMED until Lab 4) Unsprung Mass Per Corner, PROVISIONAL
+    "k_t_f":      1.316*1e6,   # N/m, front tire vertical stiffness
+    "k_t_r":      8.225*1e5,   # N/m, rear tire vertical stiffness
     # --- powertrain ---
     "T_max":      None,   # N*m, total at the wheel
     "P_max":      None,   # W, total. Published: nominal 2x450 W, peak 2x2400 W.
