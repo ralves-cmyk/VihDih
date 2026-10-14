@@ -49,14 +49,14 @@ P = {
     "C_rr":       0.012,   # - PROVISIONAL
     "C_d":        0.7,   # -
     "A_frontal":  0.25,   # m^2 - Provided by Colin Thomas
-    "rho_air":    1.20,   # kg/m^3  -- check against Golden CO elevation!
+    "rho_air":    1,   # kg/m^3  -- check against Golden CO elevation!
     # --- tire / road ---
     "mu":         5,   # - (ASSUMED until Lab 4) Unsprung Mass Per Corner, PROVISIONAL
     "k_t_f":      1.316*1e6,   # N/m, front tire vertical stiffness
     "k_t_r":      8.225*1e5,   # N/m, rear tire vertical stiffness
     # --- powertrain ---
-    "T_max":      None,   # N*m, total at the wheel
-    "P_max":      None,   # W, total. Published: nominal 2x450 W, peak 2x2400 W.
+    "T_max":      96,   # N*m, total at the wheel
+    "P_max":      4800,   # W, total. Published: nominal 2x450 W, peak 2x2400 W.
                           #    Run Test 5 with both and report both.
     "eta":        None,   # - driveline efficiency
     "drive_axle": "rear", # 'rear' | 'front' | 'awd'
@@ -105,6 +105,7 @@ def inertia_fraction(p):
 def aero_drag(v, p):
     """Return aerodynamic drag [N], positive opposing motion."""
     # TODO
+    return .5*p*v^2*C_d*A_frontal
     raise NotImplementedError
 
 
