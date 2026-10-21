@@ -36,14 +36,14 @@ P = {
     "a":          0.57,   # m, front axle to CG (from corner weights), loaded
     "h":        0.5735,   # m, combined CG height (Lab 2: tilt-measured kart
                           #      + anthropometric driver, composed) MAY NEED TO BE REVISED - Raistlin
-    "h_aero":     None,   # m, height at which drag acts
+    "h_aero":     0.5735,   # m, height at which drag acts
     "t_track":  0.7366,   # m, track width FRONT
     "t_track_r":0.50165,   # m, track width REAR
-    "r_w":        None,   # m, rolling radius
+    "r_w":        0.127,   # m, rolling radius
     # --- rotating inertia ---
     "I_wheel_f":  0.008,   # kg*m^2, per front wheel
     "I_wheel_r":  0.016,   # kg*m^2, per rear wheel ESTIMATED WITH BOUNDING METHOD - Raistlin
-    "I_motor":    None,   # kg*m^2, per motor rotor (0.0 if lumped into wheel)
+    "I_motor":    0.0,   # kg*m^2, per motor rotor (0.0 if lumped into wheel)
     "N_gear":     1.0,    # motor:wheel ratio. 1.0 for direct-drive hub motors
     # --- resistances ---
     "C_rr":       0.012,   # - PROVISIONAL
@@ -58,7 +58,7 @@ P = {
     "T_max":      96,   # N*m, total at the wheel
     "P_max":      4800,   # W, total. Published: nominal 2x450 W, peak 2x2400 W.
                           #    Run Test 5 with both and report both.
-    "eta":        None,   # - driveline efficiency
+    "eta":        1.0,   # - driveline efficiency
     "drive_axle": "rear", # 'rear' | 'front' | 'awd'
     # --- constants ---
     "g":          9.81,
@@ -87,7 +87,10 @@ def effective_mass(p):
     Careful: m_eff applies to the INERTIAL term only. Do not use it for
     rolling resistance or grade.
     """
-    # TODO
+    m = total_mass(p)
+    I_total = 2 * p["I_wheel_f"] + 2 * p["I_wheel_r"]
+    I_total += 2 * p["I_motor"] * p["N_gear"] ** 2
+    return m + I_total / p["r_w"] ** 2
     raise NotImplementedError
 
 
@@ -98,14 +101,15 @@ def inertia_fraction(p):
     Course convention: gamma is the INCREMENT, so m_eff = m * (1 + gamma).
     Expect a few percent. Zero inertia gives gamma = 0 exactly.
     """
-    # TODO
+    m = total_mass(p)
+    return (effective_mass(p) - m) / m
     raise NotImplementedError
 
 
 def aero_drag(v, p):
     """Return aerodynamic drag [N], positive opposing motion."""
     # TODO
-    return .5*p*v^2*C_d*A_frontal
+    return 0.5 * p["rho_air"] * p["C_d"] * p["A_frontal"] * v ** 2
     raise NotImplementedError
 
 
@@ -116,12 +120,16 @@ def rolling_resistance(v, p, grade=0.0):
     Use ACTUAL mass here, not effective mass.
     """
     # TODO
+    m = total_mass(p)
+    return p["C_rr"] * m * p["g"] * np.cos(grade)
     raise NotImplementedError
 
 
 def grade_force(p, grade=0.0):
     """Return grade resistance [N], positive opposing motion on an incline."""
     # TODO
+    m = total_mass(p)
+    return m * p["g"] * np.sin(grade)
     raise NotImplementedError
 
 
@@ -136,12 +144,38 @@ def rear_axle_load(a_x, v, p):
     positions reversed relative to the direction of travel.
     """
     # TODO
+    m = total_mass(p)
+    F_aero = aero_drag(v, p)
+    F_zr = (
+        (p["a"] / p["L"]) * m * p["g"]
+        + (p["h"] / p["L"]) * m * a_x
+        + (p["h_aero"] / p["L"]) * F_aero
+    )
+
+    return F_zr
     raise NotImplementedError
 
 
 def traction_limit(a_x, v, p):
     """Return max transmissible drive force [N] = mu * F_z on the driven axle."""
     # TODO
+    rear = rear_axle_load(a_x, v, p)
+
+    front = total_mass(p) * p["g"] - rear
+
+    if p["drive_axle"] == "rear":
+        normal = rear
+
+    elif p["drive_axle"] == "front":
+        normal = front
+
+    elif p["drive_axle"] == "awd":
+        normal = front + rear
+
+    else:
+        raise ValueError("Invalid drive_axle")
+
+    return p["mu"] * max(normal, 0.0)
     raise NotImplementedError
 
 
@@ -154,12 +188,32 @@ def drive_force(v, a_x, p, throttle=1.0):
     Scale the powertrain ceilings by throttle, not the traction ceiling.
     """
     # TODO
+    torque_force = (
+    throttle * p["T_max"] * p["N_gear"] * p["eta"] / p["r_w"]
+    )
+
+    power_force = (
+        throttle * p["P_max"] * p["eta"] / max(v, 0.000001)
+    )
+
+    tire_force = traction_limit(a_x, v, p)
+
+    return min(torque_force, power_force, tire_force)
     raise NotImplementedError
 
 
 def binding_limit(v, a_x, p, throttle=1.0):
     """Return 'torque' | 'power' | 'traction'. Used for diagnostics."""
     # TODO
+    ceilings = {
+        "torque": throttle * p["T_max"] * p["N_gear"] * p["eta"] / p["r_w"],
+
+        "power": throttle * p["P_max"] * p["eta"] / max(v, 0.000001),
+
+        "traction": traction_limit(a_x, v, p),
+    }
+
+    return min(ceilings, key=ceilings.get)
     raise NotImplementedError
 
 
@@ -179,6 +233,58 @@ def accel(v, p, throttle=1.0, grade=0.0):
     also bind earlier: check a_x against g*b/h.
     """
     # TODO
+    m = total_mass(p)
+
+    meff = effective_mass(p)
+
+    resist = (
+        aero_drag(v, p)
+        + rolling_resistance(v, p, grade)
+        + grade_force(p, grade)
+    )
+
+    force_powertrain = min(
+        throttle * p["T_max"] * p["N_gear"] * p["eta"] / p["r_w"],
+        throttle * p["P_max"] * p["eta"] / max(v, 0.000001),
+    )
+
+    a_candidate = (force_powertrain - resist) / meff
+
+    if force_powertrain <= traction_limit(a_candidate, v, p):
+        a_x = a_candidate
+
+    else:
+        drive_axle = p["drive_axle"]
+
+        F_at_zero = traction_limit(0.0, v, p)
+
+        if drive_axle == "rear":
+            slope = p["mu"] * m * p["h"] / p["L"]
+
+        elif drive_axle == "front":
+            slope = -p["mu"] * m * p["h"] / p["L"]
+
+        else:
+            slope = 0.0
+
+        denominator = meff - slope
+
+        if denominator <= 0:
+            raise ValueError(
+                "Traction-limited calculation invalid: possible front liftoff"
+            )
+
+        a_x = (F_at_zero - resist) / denominator
+
+    b = p["L"] - p["a"]
+
+    if p["h"] > 0 and a_x >= p["g"] * b / p["h"]:
+        raise ValueError("Front axle liftoff predicted")
+
+    if total_mass(p) * p["g"] - rear_axle_load(a_x, v, p) <= 0:
+        raise ValueError("Front axle normal load is nonpositive")
+
+    return a_x
     raise NotImplementedError
 
 
@@ -323,6 +429,113 @@ def required_runs(p):
     # Run 3: constant-speed power demand, 5..45 km/h
     # Run 4: launch on the manufacturer's max rated grade
     # TODO: implement and plot. Label every axis with units.
+    
+    #Run 1
+    # RUN 1
+
+    try:
+        launch = simulate(p, t_end=30.0)
+
+        plt.figure()
+        plt.plot(launch["t"], launch["v"] * 3.6)
+        plt.xlabel("Time (s)")
+        plt.ylabel("Speed (km/h)")
+        plt.title("Run 1: Full-throttle launch")
+        plt.grid(True)
+
+    except ValueError as e:
+        print(f"Run 1 failed: {e}")
+
+
+    # RUN 2
+
+    v_top = None
+
+    try:
+        top_run = simulate(p, t_end=90.0)
+        v_top = top_run["v"][-1]
+
+        coast = simulate(p, v0=v_top, t_end=30.0, throttle=0.0)
+
+        plt.figure()
+        plt.plot(coast["t"], coast["v"] * 3.6)
+        plt.xlabel("Time (s)")
+        plt.ylabel("Speed (km/h)")
+        plt.title("Run 2: Coastdown")
+        plt.grid(True)
+
+    except ValueError as e:
+        print(f"Run 2 failed: {e}")
+
+    # RUN 3
+
+    speeds_kmh = np.linspace(5.0, 45.0, 100)
+
+    speeds_ms = speeds_kmh / 3.6
+
+    forces = np.array([
+        aero_drag(vi, p) + rolling_resistance(vi, p)
+        for vi in speeds_ms
+    ])
+
+    wheel_power = forces * speeds_ms
+
+    plt.figure()
+
+    plt.plot(speeds_kmh, wheel_power)
+
+    plt.xlabel("Speed (km/h)")
+    plt.ylabel("Required wheel power (W)")
+    plt.title("Run 3: Constant-speed power demand")
+    plt.grid(True)
+
+
+    # RUN 4
+
+    rated_grade_percent = float(
+        input("Manufacturer maximum rated grade (%): ")
+    )
+
+    grade_angle = np.arctan(rated_grade_percent / 100.0)
+
+    try:
+        incline = simulate(p, t_end=30.0, grade=grade_angle)
+
+        plt.figure()
+        plt.plot(incline["t"], incline["v"] * 3.6)
+        plt.xlabel("Time (s)")
+        plt.ylabel("Speed (km/h)")
+        plt.title(f"Run 4: Launch on {rated_grade_percent:g}% grade")
+        plt.grid(True)
+
+    except ValueError as e:
+        print(f"Run 4 failed: {e}")
+
+
+    # NOMINAL VS PEAK POWER COMPARISON
+
+    nominal_p = dict(p)
+
+    nominal_p["P_max"] = 900.0
+
+    try:
+        nominal_top = simulate(nominal_p, t_end=90.0)["v"][-1]
+        print(f"Nominal-power 90 s speed: {nominal_top * 3.6:.2f} km/h")
+
+    except ValueError as e:
+        print(f"Nominal-power simulation failed: {e}")
+
+    if v_top is not None:
+        print(f"Peak-power 90 s speed: {v_top * 3.6:.2f} km/h")
+    else:
+        print("Peak-power simulation failed.")
+
+
+    # DISPLAY FIGURES
+
+    plt.show()
+
+    return None
     raise NotImplementedError
 
 
